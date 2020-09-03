@@ -27,10 +27,10 @@ extern std::string wm;
 
 extern int num_col;
 
-extern std::string pinned_file;
+extern std::filesystem::path    pinned_file;
 extern std::vector<std::string> pinned;
-extern ns::json cache;
-extern std::string cache_file;
+extern ns::json                 cache;
+extern std::filesystem::path    cache_file;
 
 class GridBox : public AppBox {
 public:

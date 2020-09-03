@@ -151,16 +151,16 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    std::string config_dir = get_config_dir("nwgdmenu");
+    auto config_dir = get_config_dir("nwgdmenu");
     if (!fs::is_directory(config_dir)) {
         std::cout << "Config dir not found, creating...\n";
         fs::create_directories(config_dir);
     }
 
     // default and custom style sheet
-    std::string default_css_file = config_dir + "/style.css";
+    auto default_css_file = config_dir / "style.css";
     // css file to be used
-    std::string css_file = config_dir + "/" + custom_css_file;
+    auto css_file = config_dir / custom_css_file;
     // copy default file if not found
     if (!fs::exists(default_css_file)) {
         try {

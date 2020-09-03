@@ -29,25 +29,22 @@ static std::string pid_file{};
 /*
  * Returns config dir
  * */
-std::string get_config_dir(std::string app) {
-    std::string s;
-    char *val = getenv("XDG_CONFIG_HOME");
-
-    if (val) {
-        s = val;
-        s += "/nwg-launchers/";
+std::filesystem::path get_config_dir(std::string_view app) {
+    std::filesystem::path path = getenv("XDG_CONFIG_HOME");
+    if (!path.empty()) {
+        path /= "nwg-launchers";
     } else {
-        val = getenv("HOME");
-        if (!val) {
-            std::cerr << "Couldn't find config directory, HOME not set!";
+        path = getenv("HOME");
+        if (path.empty()) {
+            std::cerr << "ERROR: Couldn't find config directory, $HOME not set!\n";
             std::exit(1);
         }
-        s = val;
-        s += "/.config/nwg-launchers/";
+        path /= ".config";
+        path /= "nwg-launchers";
     }
+    path /= app;
 
-    s += app;
-    return s;
+    return path;
 }
 
 /*

@@ -23,10 +23,10 @@ std::string wm {""};            // detected or forced window manager name
 
 int num_col = 6;                // number of grid columns
 
-std::string pinned_file {};
-std::vector<std::string> pinned;    // list of commands of pinned icons
-ns::json cache;
-std::string cache_file {};
+std::filesystem::path    cache_file;
+ns::json                 cache;
+std::filesystem::path    pinned_file;  // path to pinned icons
+std::vector<std::string> pinned;       // list of commands of pinned icons
 
 const char* const HELP_MESSAGE =
 "GTK application grid: nwggrid " VERSION_STR " (c) Piotr Miller 2020 & Contributors \n\n\
@@ -45,7 +45,7 @@ Options:\n\
 
 int main(int argc, char *argv[]) {
     bool favs (false);              // whether to display favourites
-    std::string custom_css_file {"style.css"};
+    fs::path custom_css_file = "style.css";
 
     struct timeval tp;
     gettimeofday(&tp, NULL);
@@ -130,7 +130,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (favs) {
-        cache_file = get_cache_path();
+        auto cache_file = get_cache_path();
         try {
             cache = get_cache(cache_file);
         }  catch (...) {
@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (pins) {
-        pinned_file = get_pinned_path();
+        auto pinned_file = get_pinned_path();
         pinned = get_pinned(pinned_file);
         if (pinned.size() > 0) {
           std::cout << pinned.size() << " pinned entries loaded\n";
@@ -155,29 +155,29 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    std::string config_dir = get_config_dir("nwggrid");
+    auto config_dir = get_config_dir("nwggrid");
     if (!fs::is_directory(config_dir)) {
         std::cout << "Config dir not found, creating...\n";
         fs::create_directories(config_dir);
     }
 
     // default and custom style sheet
-    std::string default_css_file = config_dir + "/style.css";
+    auto default_css_file = config_dir / "style.css";
     // css file to be used
-    std::string css_file = config_dir + "/" + custom_css_file;
+    auto css_file = config_dir / custom_css_file;
     // copy default file if not found
     if (!fs::exists(default_css_file)) {
         try {
             fs::copy_file(DATA_DIR_STR "/nwggrid/style.css", default_css_file, fs::copy_options::overwrite_existing);
         } catch (...) {
-            std::cerr << "Failed copying default style.css\n";
+            std::cerr << "ERROR: Failed copying default style.css\n";
         }
     }
 
     // This will be read-only, to find n most clicked items (n = number of grid columns)
     std::vector<CacheEntry> favourites {};
     if (cache.size() > 0) {
-        auto n = cache.size() >= static_cast<std::size_t>(num_col) ? num_col : cache.size();
+        auto n = std::min(static_cast<decltype(cache.size())>(num_col), cache.size());
         favourites = get_favourites(std::move(cache), n);
     }
 
@@ -245,6 +245,7 @@ int main(int argc, char *argv[]) {
     auto icon_theme = Gtk::IconTheme::get_for_screen(screen);
     if (!icon_theme) {
         std::cerr << "ERROR: Failed to load icon theme\n";
+        return EXIT_FAILURE;
     }
     auto& icon_theme_ref = *icon_theme.get();
     icon_theme_ref.add_resource_path(DATA_DIR_STR "/icon-missing.svg");
@@ -355,7 +356,5 @@ int main(int argc, char *argv[]) {
 
     std::cout << "Time: " << end_ms - start_ms << "ms\n";
 
-    app->run(window);
-
-    return 0;
+    return app->run(window);
 }

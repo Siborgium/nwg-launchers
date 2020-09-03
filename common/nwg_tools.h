@@ -13,6 +13,7 @@
 
 #include <iostream>
 #include <iomanip>
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -27,7 +28,7 @@ namespace ns = nlohmann;
 
 extern int image_size; // button image size in pixels
 
-std::string get_config_dir(std::string);
+std::filesystem::path get_config_dir(std::string_view);
 
 std::string detect_wm(void);
 

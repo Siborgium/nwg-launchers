@@ -124,16 +124,16 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    std::string config_dir = get_config_dir("nwgbar");
+    auto config_dir = get_config_dir("nwgbar");
     if (!fs::is_directory(config_dir)) {
         std::cout << "Config dir not found, creating...\n";
         fs::create_directories(config_dir);
     }
 
     // default and custom style sheet
-    std::string default_css_file = config_dir + "/style.css";
+    auto default_css_file = config_dir / "style.css";
     // css file to be used
-    std::string css_file = config_dir + "/" + custom_css_file;
+    auto css_file = config_dir / custom_css_file;
     // copy default file if not found
     if (!fs::exists(default_css_file)) {
         try {
@@ -144,14 +144,14 @@ int main(int argc, char *argv[]) {
     }
 
     // default or custom template
-    std::string default_bar_file = config_dir + "/bar.json";
-    std::string custom_bar_file = config_dir + "/" + definition_file;
+    auto default_bar_file = config_dir / "bar.json";
+    auto custom_bar_file = config_dir /  definition_file;
     // copy default anyway if not found
     if (!fs::exists(default_bar_file)) {
         try {
             fs::copy_file(DATA_DIR_STR "/nwgbar/bar.json", default_bar_file, fs::copy_options::overwrite_existing);
         } catch (...) {
-            std::cerr << "Failed copying default template\n";
+            std::cerr << "ERROR: Failed copying default template\n";
         }
     }
 
