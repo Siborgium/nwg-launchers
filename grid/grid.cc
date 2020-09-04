@@ -130,7 +130,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (favs) {
-        auto cache_file = get_cache_path();
+        cache_file = get_cache_path();
         try {
             cache = get_cache(cache_file);
         }  catch (...) {
@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (pins) {
-        auto pinned_file = get_pinned_path();
+        pinned_file = get_pinned_path();
         pinned = get_pinned(pinned_file);
         if (pinned.size() > 0) {
           std::cout << pinned.size() << " pinned entries loaded\n";

@@ -18,66 +18,78 @@ CacheEntry::CacheEntry(std::string exec, int clicks): exec(std::move(exec)), cli
 /*
  * Returns cache file path
  * */
-std::string get_cache_path() {
-    std::string s = "";
-    char* val = getenv("XDG_CACHE_HOME");
-    if (val) {
-        s = val;
+fs::path get_cache_path() {
+    fs::path path;
+    char* var = getenv("XDG_CACHE_HOME");
+    if (var) {
+        path = var;
     } else {
-        char* val = getenv("HOME");
-        s = val;
-        s += "/.cache";
+        var = getenv("HOME");
+        if (!var) {
+            std::cerr << "ERROR: Couldn't find config directory, $HOME not set!\n";
+            std::exit(1);
+        }
+        path = var;
+        path /= ".cache";
     }
-    fs::path dir (s);
-    fs::path file ("nwg-fav-cache");
-    fs::path full_path = dir / file;
-
-    return full_path;
+    path /= "nwg-fav-cache";
+    
+    return path;
 }
 
 /*
  * Returns pinned cache file path
  * */
-std::string get_pinned_path() {
-    std::string s = "";
-    char* val = getenv("XDG_CACHE_HOME");
-    if (val) {
-        s = val;
+fs::path get_pinned_path() {
+    fs::path path;
+    char* var = getenv("XDG_CACHE_HOME");
+    if (var) {
+        path = var;
     } else {
-        val = getenv("HOME");
-        s = val;
-        s += "/.cache";
+        var = getenv("HOME");
+        if (!var) {
+            std::cerr << "ERROR: Couldn't find config directory, $HOME not set!\n";
+            std::exit(1);
+        }
+        path = var;
+        path /= ".cache";
     }
-    fs::path dir (s);
-    fs::path file ("nwg-pin-cache");
-    fs::path full_path = dir / file;
+    path /= "nwg-pin-cache";
 
-    return full_path;
+    return path;
 }
 
 /*
  * Returns locations of .desktop files
  * */
-std::vector<std::string> get_app_dirs() {
-    std::string homedir = getenv("HOME");
-    std::vector<std::string> result = {homedir + "/.local/share/applications", "/usr/share/applications",
-        "/usr/local/share/applications"};
+std::vector<fs::path> get_app_dirs() {
+    fs::path homedir = getenv("HOME");
+    if (homedir.empty()) {
+        std::cerr << "ERROR: Couldn't find home directory, $HOME not set!\n";
+        std::exit(1);
+    }
+
+    std::vector<fs::path> result {
+        homedir / ".local/share/applications",
+        "/usr/share/applications",
+        "/usr/local/share/applications"
+    };
 
     auto xdg_data_dirs = getenv("XDG_DATA_DIRS");
-    if (xdg_data_dirs != NULL) {
+    if (xdg_data_dirs) {
         auto dirs = split_string(xdg_data_dirs, ":");
         for (auto& dir : dirs) {
             result.emplace_back(dir);
         }
     }
     // Add flatpak dirs if not found in XDG_DATA_DIRS
-    std::string flatpak_data_dirs[] = {
-        homedir + "/.local/share/flatpak/exports/share/applications",
+    fs::path flatpak_data_dirs[] {
+        homedir  / ".local/share/flatpak/exports/share/applications",
         "/var/lib/flatpak/exports/share/applications"
     };
-    for (std::string fp_dir : flatpak_data_dirs) {
+    for (auto& fp_dir : flatpak_data_dirs) {
         if (std::find(result.begin(), result.end(), fp_dir) == result.end()) {
-            result.emplace_back(fp_dir);
+            result.emplace_back(std::move(fp_dir));
         }
     }
     return result;
@@ -86,14 +98,16 @@ std::vector<std::string> get_app_dirs() {
 /*
  * Returns all .desktop files paths
  * */
-std::vector<std::string> list_entries(const std::vector<std::string>& paths) {
-    std::vector<std::string> desktop_paths;
+std::vector<fs::path> list_entries(const std::vector<fs::path>& paths) {
+    std::vector<fs::path> desktop_paths;
     std::error_code ec;
     for (auto& dir : paths) {
         // if directory exists
         if (std::filesystem::is_directory(dir, ec) && !ec) {
-            for (const auto & entry : fs::directory_iterator(dir)) {
-                desktop_paths.emplace_back(entry.path());
+            for (auto& entry : fs::directory_iterator(dir)) {
+                if (std::filesystem::is_regular_file(entry, ec) && !ec) {
+                    desktop_paths.emplace_back(entry);
+                }
             }
         }
     }
@@ -200,8 +214,8 @@ std::optional<DesktopEntry> desktop_entry(std::string&& path, const std::string&
 /*
  * Returns json object out of the cache file
  * */
-ns::json get_cache(const std::string& cache_file) {
-    std::string cache_string = read_file_to_string(cache_file);
+ns::json get_cache(fs::path& cache_file) {
+    auto cache_string = read_file_to_string(cache_file);
 
     return string_to_json(cache_string);
 }
@@ -209,7 +223,7 @@ ns::json get_cache(const std::string& cache_file) {
 /*
  * Returns vector of strings out of the pinned cache file content
  * */
-std::vector<std::string> get_pinned(const std::string& pinned_file) {
+std::vector<std::string> get_pinned(fs::path& pinned_file) {
     std::vector<std::string> lines;
     std::ifstream in(pinned_file);
     if(!in) {
@@ -217,8 +231,8 @@ std::vector<std::string> get_pinned(const std::string& pinned_file) {
         save_string_to_file("", pinned_file);
         return lines;
     }
-    std::string str;
 
+    std::string str;
     while (std::getline(in, str)) {
         // add non-empty lines to the vector
         if (!str.empty()) {

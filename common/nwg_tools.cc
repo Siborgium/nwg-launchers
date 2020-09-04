@@ -31,17 +31,15 @@ static std::string pid_file{};
  * */
 std::filesystem::path get_config_dir(std::string_view app) {
     std::filesystem::path path = getenv("XDG_CONFIG_HOME");
-    if (!path.empty()) {
-        path /= "nwg-launchers";
-    } else {
+    if (path.empty()) {
         path = getenv("HOME");
         if (path.empty()) {
             std::cerr << "ERROR: Couldn't find config directory, $HOME not set!\n";
             std::exit(1);
         }
         path /= ".config";
-        path /= "nwg-launchers";
     }
+    path /= "nwg-launchers";
     path /= app;
 
     return path;
