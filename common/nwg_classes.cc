@@ -49,9 +49,14 @@ CommonWindow::~CommonWindow() { }
 bool CommonWindow::on_draw(const Cairo::RefPtr<Cairo::Context>& cr) {
     cr->save();
     if (_SUPPORTS_ALPHA) {
-        cr->set_source_rgba(background.red, background.green, background.blue, background.alpha);
+        cr->set_source_rgba(background_color.red,
+                            background_color.green,
+                            background_color.blue,
+                            background_color.alpha);
     } else {
-        cr->set_source_rgb(background.red, background.green, background.blue);
+        cr->set_source_rgb(background_color.red,
+                           background_color.green,
+                           background_color.blue);
     }
     cr->set_operator(Cairo::OPERATOR_SOURCE);
     cr->paint();
@@ -73,6 +78,10 @@ void CommonWindow::check_screen() {
     }
     _SUPPORTS_ALPHA = (bool)visual;
     gtk_widget_set_visual(GTK_WIDGET(gobj()), visual->gobj());
+}
+
+void CommonWindow::set_background_color(RGBA color) {
+    this -> background_color = color;
 }
 
 AppBox::AppBox() {

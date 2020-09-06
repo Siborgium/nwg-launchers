@@ -16,7 +16,6 @@
 #include "on_event.h"
 #include "bar.h"
 
-RGBA background = {0.0, 0.0, 0.0, 0.9};
 std::string wm {""};            // detected or forced window manager name
 const char* const HELP_MESSAGE =
 "GTK button bar: nwgbar " VERSION_STR " (c) Piotr Miller & Contributors 2020\n\n\
@@ -33,6 +32,7 @@ Options:\n\
 -wm <wmname>     window manager name (if can not be detected)\n";
 
 int main(int argc, char *argv[]) {
+    RGBA background_color = {0.0, 0.0, 0.0, 0.9};
     std::string definition_file {"bar.json"};
     std::string custom_css_file {"style.css"};
     std::string orientation {"h"};
@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     gettimeofday(&tp, NULL);
     long int start_ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
 
-    create_pid_file_or_kill_pid("nwgbar");
+    register_instance("nwgbar");
 
     InputParser input(argc, argv);
     if(input.cmdOptionExists("-h")){
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
         try {
             auto o = std::stod(std::string{opa});
             if (o >= 0.0 && o <= 1.0) {
-                background.alpha = o;
+                background_color.alpha = o;
             } else {
                 std::cerr << "\nERROR: Opacity must be in range 0.0 to 1.0\n\n";
             }
@@ -102,9 +102,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    std::string_view bcg = input.getCmdOption("-b");
-    if (!bcg.empty()) {
-        set_background(bcg);
+    auto background_color_string = input.getCmdOption("-b");
+    if (!background_color_string.empty()) {
+        decode_color(background_color_string, background_color);
     }
 
     auto i_size = input.getCmdOption("-s");
@@ -210,6 +210,7 @@ int main(int argc, char *argv[]) {
     }
 
     MainWindow window;
+    window.set_background_color(background_color);
     window.show();
 
     window.signal_button_press_event().connect(sigc::ptr_fun(&on_window_clicked));

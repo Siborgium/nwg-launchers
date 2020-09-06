@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <signal.h>
 
+#include <charconv>
 #include <iostream>
 #include <fstream>
 
@@ -24,7 +25,7 @@
 int image_size = 72;
 
 // stores the name of the pid_file, for use in atexit
-static std::string pid_file{};
+static std::filesystem::path pid_file;
 
 /*
  * Returns config dir
@@ -35,7 +36,7 @@ std::filesystem::path get_config_dir(std::string_view app) {
         path = getenv("HOME");
         if (path.empty()) {
             std::cerr << "ERROR: Couldn't find config directory, $HOME not set!\n";
-            std::exit(1);
+            std::exit(EXIT_FAILURE);
         }
         path /= ".config";
     }
@@ -44,7 +45,26 @@ std::filesystem::path get_config_dir(std::string_view app) {
 
     return path;
 }
-
+/*
+ * Return runtime dir
+ * */
+std::filesystem::path get_runtime_dir() {
+    char* xdg_runtime_dir = getenv("XDG_RUNTIME_DIR");
+    if (!xdg_runtime_dir) {
+        std::array<char, 64> myuid;
+        auto myuid_ = getuid();
+        auto [p, ec] = std::to_chars(myuid.begin(), myuid.end(), myuid_);
+        if (ec != std::errc()) {
+            std::cerr << "ERROR: Failed to convert UID to chars\n";
+            std::exit(EXIT_FAILURE);
+        }
+        std::string_view myuid_view(myuid.data(), p - myuid.data());
+        std::filesystem::path path = "/var/run/user";
+        path /= myuid_view;
+        return path;
+    }
+    return xdg_runtime_dir;
+}
 /*
  * Returns window manager name
  * */
@@ -131,7 +151,8 @@ Geometry display_geometry(const std::string& wm, Glib::RefPtr<Gdk::Display> disp
 
 /*
  * Returns Gtk::Image out of the icon name of file path
- * */
+ * TODO: Move it to the constructor or somewhere else
+ *  */
 Gtk::Image* app_image(const Gtk::IconTheme& icon_theme, const std::string& icon) {
     Glib::RefPtr<Gdk::Pixbuf> pixbuf;
 
@@ -232,8 +253,9 @@ void save_json(const ns::json& json_obj, const std::string& filename) {
 
 /*
  * Sets RGBA background according to hex strings
-* */
-void set_background(std::string_view string) {
+ * Note: if `string` is #RRGGBB, alpha will not be changed
+ * */
+void decode_color(std::string_view string, RGBA& color) {
     std::string hex_string {"0x"};
     unsigned long int rgba;
     std::stringstream ss;
@@ -246,14 +268,14 @@ void set_background(std::string_view string) {
         ss << std::hex << hex_string;
         ss >> rgba;
         if (hex_string.size() == 8) {
-            background.red = ((rgba >> 16) & 0xff) / 255.0;
-            background.green = ((rgba >> 8) & 0xff) / 255.0;
-            background.blue = ((rgba) & 0xff) / 255.0;
+            color.red = ((rgba >> 16) & 0xff) / 255.0;
+            color.green = ((rgba >> 8) & 0xff) / 255.0;
+            color.blue = ((rgba) & 0xff) / 255.0;
         } else if (hex_string.size() == 10) {
-            background.red = ((rgba >> 24) & 0xff) / 255.0;
-            background.green = ((rgba >> 16) & 0xff) / 255.0;
-            background.blue = ((rgba >> 8) & 0xff) / 255.0;
-            background.alpha = ((rgba) & 0xff) / 255.0;
+            color.red = ((rgba >> 24) & 0xff) / 255.0;
+            color.green = ((rgba >> 16) & 0xff) / 255.0;
+            color.blue = ((rgba >> 8) & 0xff) / 255.0;
+            color.alpha = ((rgba) & 0xff) / 255.0;
         } else {
             std::cerr << "ERROR: invalid color value. Should be RRGGBB or RRGGBBAA\n";
         }
@@ -290,65 +312,82 @@ static void clean_pid_file(void) {
 }
 
 /*
- * Signal handler to exit normally with SIGTERM
+ * Signal handler to exit normally
  * */
 static void exit_normal(int sig) {
-    if (sig == SIGTERM) {
-        std::cerr << "Received SIGTERM, exiting...\n";
-    }
+    auto signal = strsignal(sig);
+    std::cerr << "Received " << signal << ", exiting...\n";
+    clean_pid_file();
+    std::exit(128 + sig); // https://unix.stackexchange.com/a/99117
+}
 
-    std::exit(1);
+/*
+ * Prints message and exits with 0 upon receving SIGTERM
+ * On failure exits with EXIT_FAILURE
+ * */
+void set_default_sigterm_handler() {
+    if (set_signal_handler(exit_normal, SIGTERM) < 0) {
+        std::cerr << "ERROR: Failed to set SIGTERM handler\n";
+        std::exit(EXIT_FAILURE);
+    }
 }
 
 /*
  * Creates PID file for the new instance,
- * or kills the other cmd instance.
+ * killing other instance if needed.
  *
- * If it creates a PID file, it also sets up a signal handler to exit
- * normally if it receives SIGTERM; and registers an atexit() action
- * to run when exiting normally.
+ * This file will be removed on exit. 
+ * To achieve this, this procedure sets `atexit`, SIGINT and SIGTERM handlers
  *
  * This allows for behavior where using the shortcut to open one
  * of the launchers closes the currently running one.
  * */
-void create_pid_file_or_kill_pid(std::string cmd) {
-    std::string myuid = std::to_string(getuid());
-
-    char *runtime_dir_tmp = getenv("XDG_RUNTIME_DIR");
-    std::string runtime_dir;
-    if (runtime_dir_tmp) {
-        runtime_dir = runtime_dir_tmp;
-    } else {
-        runtime_dir = "/var/run/user/" + myuid;
-    }
-
-    pid_file = runtime_dir + "/" + cmd + ".pid";
+void register_instance(std::string_view cmd) {
+    pid_file = get_runtime_dir();
+    pid_file /= cmd;
+    pid_file += ".pid";
 
     auto pid_read = std::ifstream(pid_file);
     // set to not throw exceptions
     pid_read.exceptions(std::ifstream::goodbit);
+    // another instance is running, close it
     if (pid_read.is_open()) {
-        // opening file worked - file exists
         pid_t saved_pid;
         pid_read >> saved_pid;
-
-        if (saved_pid > 0 && kill(saved_pid, 0) == 0) {
-            // found running instance
-            // PID file will be deleted by process's atexit routine
-            int rv = kill(saved_pid, SIGTERM);
-
-            // exit with status dependent on kill success
-            std::exit(rv == 0 ? 0 : 1);
+        if (saved_pid <= 0) {
+            std::cerr << "ERROR: Bad pid\n";
+            std::exit(EXIT_FAILURE);
+        }
+        if (kill(saved_pid, 0) != 0) {
+            std::cerr << "ERROR: `kill` check failed\n";
+            std::exit(EXIT_FAILURE);
+        }
+        if (kill(saved_pid, SIGTERM) != 0) {
+            std::cerr << "ERROR: Failed to send SIGTERM to another instance\n";
+            std::exit(EXIT_FAILURE);
         }
     }
+    auto pid = getpid();
+    auto pid_write = std::ofstream(pid_file);
+    pid_write << pid;
 
-    std::string mypid = std::to_string(getpid());
-    save_string_to_file(mypid, pid_file);
-
-    // register function to clean pid file
+    // TODO: if received a signal from other instance, do not unlink file (?)
     atexit(clean_pid_file);
-    // register signal handler for SIGTERM
-    struct sigaction act {};
-    act.sa_handler = exit_normal;
-    sigaction(SIGTERM, &act, nullptr);
+    int err = 0;
+    err += set_signal_handler(exit_normal, SIGTERM);
+    err += set_signal_handler(exit_normal, SIGINT);
+    if (err < 0) {
+        std::cerr << "ERROR: Failed to set signal handlers\n";
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+/*
+ * Calls `handler` upon receiving Unix signal `signal`
+ * */
+int set_signal_handler(void (*sa_restorer)(int), int sig) {
+    struct sigaction action;
+    action.sa_flags = 0;
+    action.sa_handler = sa_restorer;
+    return sigaction(sig, &action, nullptr);
 }

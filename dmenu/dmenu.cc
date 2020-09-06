@@ -23,7 +23,6 @@
 
 std::string h_align {""};                   // horizontal alignment
 std::string v_align {""};                   // vertical alignment
-RGBA background = {0.0, 0.0, 0.0, 0.3};
 std::string wm {""};                        // detected or forced window manager name
 std::string settings_file {""};
 
@@ -54,6 +53,7 @@ Delete        clear search box\n\
 Insert        switch case sensitivity\n";
 
 int main(int argc, char *argv[]) {
+    RGBA background_color = {0.0, 0.0, 0.0, 0.3};
     std::string custom_css_file {"style.css"};
 
     /* For now the settings file only determines if case_sensitive was turned on.
@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
         case_sensitive = false;
     }
 
-    create_pid_file_or_kill_pid("nwgdmenu");
+    register_instance("nwgdmenu");
 
     InputParser input(argc, argv);
     if (input.cmdOptionExists("-h")){
@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
         try {
             auto o = std::stod(std::string{opa});
             if (o >= 0.0 && o <= 1.0) {
-                background.alpha = o;
+                background_color.alpha = o;
             } else {
                 std::cerr << "\nERROR: Opacity must be in range 0.0 to 1.0\n\n";
             }
@@ -129,9 +129,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    std::string_view bcg = input.getCmdOption("-b");
-    if (!bcg.empty()) {
-        set_background(bcg);
+    auto background_color_string = input.getCmdOption("-b");
+    if (!background_color_string.empty()) {
+        decode_color(background_color_string, background_color);
     }
 
     auto rw = input.getCmdOption("-r");
@@ -225,6 +225,7 @@ int main(int argc, char *argv[]) {
     }
 
     MainWindow window;
+    window.set_background_color(background_color);
     // For openbox and similar we'll need the window x, y coordinates
     window.show();
 

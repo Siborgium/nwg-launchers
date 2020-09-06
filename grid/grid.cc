@@ -8,6 +8,7 @@
  * */
 
 #include <sys/time.h>
+#include <signal.h>
 #include <unistd.h>
 
 #include <charconv>
@@ -18,7 +19,6 @@
 #include "grid.h"
 
 bool pins = false;              // whether to display pinned
-RGBA background = {0.0, 0.0, 0.0, 0.9};
 std::string wm {""};            // detected or forced window manager name
 
 int num_col = 6;                // number of grid columns
@@ -43,15 +43,22 @@ Options:\n\
 -l <ln>          force use of <ln> language\n\
 -wm <wmname>     window manager name (if can not be detected)\n";
 
+sigc::slot<void>* global_sigterm_handler_slot;
+void sigterm_handler(int sig) {
+    (void)sig; // suppress warning
+    global_sigterm_handler_slot->operator()();
+}
+
 int main(int argc, char *argv[]) {
-    bool favs (false);              // whether to display favourites
+    RGBA background_color = {0.0, 0.0, 0.0, 0.9};
     fs::path custom_css_file = "style.css";
+    bool favs = false;              // whether to display favourites
 
     struct timeval tp;
     gettimeofday(&tp, NULL);
     long int start_ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
 
-    create_pid_file_or_kill_pid("nwggrid");
+    register_instance("nwggrid");
 
     std::string lang ("");
 
@@ -100,7 +107,7 @@ int main(int argc, char *argv[]) {
         try {
             auto o = std::stod(std::string{opa});
             if (o >= 0.0 && o <= 1.0) {
-                background.alpha = o;
+                background_color.alpha = o;
             } else {
                 std::cerr << "\nERROR: Opacity must be in range 0.0 to 1.0\n\n";
             }
@@ -109,9 +116,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    std::string_view bcg = input.getCmdOption("-b");
-    if (!bcg.empty()) {
-        set_background(bcg);
+    auto background_color_string = input.getCmdOption("-b");
+    if (!background_color_string.empty()) {
+        decode_color(background_color_string, background_color);
     }
 
     auto i_size = input.getCmdOption("-s");
@@ -259,18 +266,31 @@ int main(int argc, char *argv[]) {
     }
 
     MainWindow window;
+    window.set_background_color(background_color);
+    sigc::slot<void> signal_handler_slot = [&]() {
+        app->add_window(window);
+        window.show();
 
-    window.show();
-
-    /* Detect focused display geometry: {x, y, width, height} */
-    auto geometry = display_geometry(wm, display, window.get_window());
-    std::cout << "Focused display: " << geometry.x << ", " << geometry.y << ", " << geometry.width << ", "
+        /* Detect focused display geometry: {x, y, width, height} */
+        auto geometry = display_geometry(wm, display, window.get_window());
+        std::cout << "Focused display: " << geometry.x << ", " << geometry.y << ", " << geometry.width << ", "
     << geometry.height << '\n';
 
-    int x = geometry.x;
-    int y = geometry.y;
-    int w = geometry.width;
-    int h = geometry.height;
+        int x = geometry.x;
+        int y = geometry.y;
+        int w = geometry.width;
+        int h = geometry.height;
+
+        if (wm == "sway" || wm == "i3" || wm == "openbox") {
+            window.resize(w, h);
+            window.move(x, y);
+        }
+    };
+    global_sigterm_handler_slot = &signal_handler_slot;
+    if (set_signal_handler(sigterm_handler, SIGUSR1) < 0) {
+        std::cerr << "ERROR: Failed to set signal handler\n";
+        return EXIT_FAILURE;
+    }
 
     /* turn off borders, enable floating on sway */
     if (wm == "sway") {
@@ -280,10 +300,6 @@ int main(int argc, char *argv[]) {
         std::system(cmd);
     }
 
-    if (wm == "sway" || wm == "i3" || wm == "openbox") {
-        window.resize(w, h);
-        window.move(x, y);
-    }
 
     /* Create buttons for pinned entries */
     for (auto& pin : pinned) {
@@ -348,7 +364,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    
     window.build_grids();
 
     gettimeofday(&tp, NULL);
@@ -356,5 +371,6 @@ int main(int argc, char *argv[]) {
 
     std::cout << "Time: " << end_ms - start_ms << "ms\n";
 
-    return app->run(window);
+    app->hold();
+    return app->run();
 }

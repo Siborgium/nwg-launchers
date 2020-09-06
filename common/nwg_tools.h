@@ -29,6 +29,7 @@ namespace ns = nlohmann;
 extern int image_size; // button image size in pixels
 
 std::filesystem::path get_config_dir(std::string_view);
+std::filesystem::path get_runtime_dir();
 
 std::string detect_wm(void);
 
@@ -41,11 +42,13 @@ std::string_view take_last_by(std::string_view, std::string_view);
 
 ns::json string_to_json(const std::string&);
 void save_json(const ns::json&, const std::string&);
-void set_background(const std::string_view);
+void decode_color(std::string_view, RGBA&);
 
 std::string get_output(const std::string&);
 
 Gtk::Image* app_image(const Gtk::IconTheme&, const std::string&);
 Geometry display_geometry(const std::string&, Glib::RefPtr<Gdk::Display>, Glib::RefPtr<Gdk::Window>);
 
-void create_pid_file_or_kill_pid(std::string);
+void register_instance(std::string_view);
+int set_signal_handler(void (*)(int), int);
+void set_default_sigterm_handler();
