@@ -264,21 +264,6 @@ int main(int argc, char *argv[]) {
     }
 
     menu.signal_deactivate().connect(sigc::mem_fun(window, &MainWindow::close));
-
-    int cnt = 0;
-    for (auto& command : all_commands) {
-        auto item = new Gtk::MenuItem();
-        item -> set_label(command);
-        item -> signal_activate().connect(sigc::bind<std::string>(sigc::ptr_fun(&on_item_clicked),
-                                                               std::move(command)));
-
-        menu.append(*item);
-        cnt++;
-        if (cnt > rows - 1) {
-            break;
-        }
-    }
-
     menu.set_reserve_toggle_size(false);
     menu.set_property("width_request", w / 8);
 

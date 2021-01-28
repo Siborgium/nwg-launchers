@@ -44,15 +44,19 @@ class DMenu : public Gtk::Menu {
     public:
         DMenu(Gtk::Window&);
         ~DMenu();
+        void emplace_back(const Glib::ustring&);
+        
         Gtk::SearchEntry searchbox;
-
     private:
-        Gtk::Window& main;
+        Gtk::Window&   main;
+        Gtk::MenuItem* first_item = nullptr;
         bool case_sensitivity_changed = false;
+        bool is_being_written_to = false;
         
         bool on_key_press_event(GdkEventKey* event) override;
         void filter_view();
         void switch_case_sensitivity();
+        void fix_selection();
         void on_item_clicked(Glib::ustring cmd);
 };
 

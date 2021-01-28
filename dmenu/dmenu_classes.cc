@@ -50,6 +50,20 @@ inline auto set_searchbox_placeholder = [](auto && searchbox, auto case_sensitiv
     searchbox.set_placeholder_text(placeholders[case_sensitive]);
 };
 
+inline auto build_commands_list = [](auto && dmenu, auto && commands, auto max) {
+    decltype(max) count{ 0 };
+    for (auto && command: commands) {
+        dmenu.emplace_back(command);
+        count++;
+        if (count == max) {
+            break;
+        }
+    }
+};
+
+/*
+ * 
+ */
 DMenu::DMenu(Gtk::Window& main): main{main} {
     set_searchbox_placeholder(searchbox, case_sensitive);
     searchbox.set_sensitive(true);
@@ -61,6 +75,8 @@ DMenu::DMenu(Gtk::Window& main): main{main} {
         search_item->set_name("search_item");
         append(*search_item);
     }
+    build_commands_list(*this, all_commands, rows);
+    fix_selection();
 }
 
 DMenu::~DMenu() {
@@ -72,11 +88,29 @@ DMenu::~DMenu() {
     }
 }
 
+void DMenu::emplace_back(const Glib::ustring& cmd) {
+    auto item = Gtk::manage(new Gtk::MenuItem{ cmd });
+    item->signal_activate()
+        .connect(sigc::bind<Glib::ustring>(sigc::mem_fun(*this, &DMenu::on_item_clicked), cmd));
+    append(*item);
+    if (!first_item) {
+        first_item = item;
+    }
+}
+
+
 void DMenu::switch_case_sensitivity() {
     case_sensitivity_changed = true;
     case_sensitive = !case_sensitive;
     searchbox.set_text("");
     set_searchbox_placeholder(searchbox, case_sensitive);
+}
+
+void DMenu::fix_selection() {
+    if (first_item) {
+        this->select_item(*first_item);
+        first_item->grab_focus();
+    }
 }
 
 bool DMenu::on_key_press_event(GdkEventKey* key_event) {
@@ -89,16 +123,18 @@ bool DMenu::on_key_press_event(GdkEventKey* key_event) {
                 searchbox.set_text("");
                 break;
             case GDK_KEY_Insert:
-                searchbox.set_text("");
                 case_sensitive = !case_sensitive;
                 switch_case_sensitivity();
-                this -> filter_view();
+                searchbox.set_text("");
                 break;
             case GDK_KEY_Left:
             case GDK_KEY_Right:
             case GDK_KEY_Up:
             case GDK_KEY_Down:
-                set_active(1);
+                // seem to work fine as is
+                break;
+            case GDK_KEY_Return:
+                fix_selection();
                 break;
             default:
                 searchbox.grab_focus();
@@ -123,38 +159,34 @@ void DMenu::on_item_clicked(Glib::ustring cmd) {
 
 /* Rebuild menu to match the search phrase */
 void DMenu::filter_view() {
+    auto clear_children = [this]() {
+        this->foreach([this](auto && child) {
+            if (child.get_name() != "search_item") {
+                this->remove(child);
+            }
+        });
+        this->first_item = nullptr;
+    };
     auto search_phrase = searchbox.get_text();
     if (search_phrase.size() > 0) {
         // remove all items except searchbox
-        for (auto item : this -> get_children()) {
-            if (item -> get_name() != "search_item") {
-                delete item;
-            }
-        }
+        clear_children();
         int cnt = 0;
         bool limit_exhausted = false;
         for (Glib::ustring command : all_commands) {
-            std::string sf = search_phrase;
-            std::string cm = command;
+            auto sf = search_phrase;
+            auto cm = command;
             if (!case_sensitive) {
-                for(unsigned int l = 0; l < sf.length(); l++) {
-                   sf[l] = toupper(sf[l]);
-                }
-                for(unsigned int l = 0; l < cm.length(); l++) {
-                   cm[l] = toupper(cm[l]);
-                }
+                sf = sf.uppercase();
+                cm = cm.uppercase();
             }
             if (cm.find(sf) == 0) {
-                Gtk::MenuItem *item = new Gtk::MenuItem();
-                item -> set_label(command);
-                item -> signal_activate().connect(sigc::bind<Glib::ustring>(sigc::mem_fun
-                    (*this, &DMenu::on_item_clicked), command));
-                this -> append(*item);
+                emplace_back(command);
                 // This will highlight 1st menu item, still it won't start on Enter.
                 // See workaround in on_key_press_event.
-                if (cnt == 0) {
-                    item -> select();
-                }
+                //if (cnt == 0) {
+                //    item -> select();
+                //}
                 cnt++;
                 if (cnt > rows - 1) {
                     limit_exhausted = true;
@@ -164,22 +196,14 @@ void DMenu::filter_view() {
         }
         if (!limit_exhausted) {
             for (Glib::ustring command : all_commands) {
-                std::string sf = search_phrase;
-                std::string cm = command;
+                auto sf = search_phrase;
+                auto cm = command;
                 if (!case_sensitive) {
-                    for(unsigned int l = 0; l < sf.length(); l++) {
-                       sf[l] = toupper(sf[l]);
-                    }
-                    for(unsigned int l = 0; l < cm.length(); l++) {
-                       cm[l] = toupper(cm[l]);
-                    }
+                    sf = sf.uppercase();
+                    cm = cm.uppercase();
                 }
-                if (cm.find(sf) != std::string::npos && cm.find(sf) != 0) {
-                    Gtk::MenuItem *item = new Gtk::MenuItem();
-                    item -> set_label(command);
-                    item -> signal_activate().connect(sigc::bind<Glib::ustring>(sigc::mem_fun
-                        (*this, &DMenu::on_item_clicked), cm));
-                    this -> append(*item);
+                if (cm.find(sf) != cm.npos && cm.find(sf) != 0) {
+                    emplace_back(command);
                     cnt++;
                     if (cnt > rows - 1) {
                         break;
@@ -190,26 +214,14 @@ void DMenu::filter_view() {
         this -> show_all();
 
     } else {
-        switch_case_sensitivity();
+        set_searchbox_placeholder(searchbox, case_sensitive);
         // remove all items except searchbox
-        for (auto item : this -> get_children()) {
-            if (item -> get_name() != "search_item") {
-                delete item;
-            }
-        }
-        int cnt = 0;
-        for (Glib::ustring command : all_commands) {
-            Gtk::MenuItem *item = new Gtk::MenuItem();
-            item -> set_label(command);
-            item -> signal_activate().connect(sigc::bind<Glib::ustring>(sigc::mem_fun(*this, &DMenu::on_item_clicked), command));
-            this -> append(*item);
-            cnt++;
-            if (cnt > rows - 1) {
-                break;
-            }
-        }
+        clear_children();
+        build_commands_list(*this, all_commands, rows);
         this -> show_all();
     }
+    fix_selection();
+
 }
 
 MainWindow::MainWindow() : CommonWindow("~nwgdmenu", "~nwgdmenu"), menu(nullptr) {
