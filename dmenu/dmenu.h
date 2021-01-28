@@ -46,12 +46,11 @@ class DMenu : public Gtk::Menu {
         ~DMenu();
         void emplace_back(const Glib::ustring&);
         
-        Gtk::SearchEntry searchbox;
     private:
+        Gtk::SearchEntry searchbox;
         Gtk::Window&   main;
         Gtk::MenuItem* first_item = nullptr;
         bool case_sensitivity_changed = false;
-        bool is_being_written_to = false;
         
         bool on_key_press_event(GdkEventKey* event) override;
         void filter_view();

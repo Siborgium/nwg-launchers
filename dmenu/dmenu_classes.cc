@@ -61,9 +61,6 @@ inline auto build_commands_list = [](auto && dmenu, auto && commands, auto max) 
     }
 };
 
-/*
- * 
- */
 DMenu::DMenu(Gtk::Window& main): main{main} {
     set_searchbox_placeholder(searchbox, case_sensitive);
     searchbox.set_sensitive(true);
@@ -97,7 +94,6 @@ void DMenu::emplace_back(const Glib::ustring& cmd) {
         first_item = item;
     }
 }
-
 
 void DMenu::switch_case_sensitivity() {
     case_sensitivity_changed = true;
@@ -134,7 +130,6 @@ bool DMenu::on_key_press_event(GdkEventKey* key_event) {
                 // seem to work fine as is
                 break;
             case GDK_KEY_Return:
-                fix_selection();
                 break;
             default:
                 searchbox.grab_focus();
@@ -173,22 +168,19 @@ void DMenu::filter_view() {
         clear_children();
         int cnt = 0;
         bool limit_exhausted = false;
+        auto sf = search_phrase;
+        if (!case_sensitive) {
+            sf = sf.uppercase();
+        }
         for (Glib::ustring command : all_commands) {
-            auto sf = search_phrase;
             auto cm = command;
             if (!case_sensitive) {
-                sf = sf.uppercase();
                 cm = cm.uppercase();
             }
             if (cm.find(sf) == 0) {
                 emplace_back(command);
-                // This will highlight 1st menu item, still it won't start on Enter.
-                // See workaround in on_key_press_event.
-                //if (cnt == 0) {
-                //    item -> select();
-                //}
                 cnt++;
-                if (cnt > rows - 1) {
+                if (cnt == rows) {
                     limit_exhausted = true;
                     break;
                 }
@@ -196,16 +188,14 @@ void DMenu::filter_view() {
         }
         if (!limit_exhausted) {
             for (Glib::ustring command : all_commands) {
-                auto sf = search_phrase;
                 auto cm = command;
                 if (!case_sensitive) {
-                    sf = sf.uppercase();
                     cm = cm.uppercase();
                 }
                 if (cm.find(sf) != cm.npos && cm.find(sf) != 0) {
                     emplace_back(command);
                     cnt++;
-                    if (cnt > rows - 1) {
+                    if (cnt == rows) {
                         break;
                     }
                 }
