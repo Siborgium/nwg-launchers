@@ -42,13 +42,17 @@ extern bool case_sensitive;
 
 class DMenu : public Gtk::Menu {
     public:
-        DMenu();
+        DMenu(Gtk::Window&);
+        ~DMenu();
         Gtk::SearchEntry searchbox;
-        Glib::ustring search_phrase;
 
     private:
+        Gtk::Window& main;
+        bool case_sensitivity_changed = false;
+        
         bool on_key_press_event(GdkEventKey* event) override;
         void filter_view();
+        void switch_case_sensitivity();
         void on_item_clicked(Glib::ustring cmd);
 };
 

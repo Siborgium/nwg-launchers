@@ -57,12 +57,12 @@ Insert        switch case sensitivity\n";
 int main(int argc, char *argv[]) {
     std::string custom_css_file {"style.css"};
 
-    /* For now the settings file only determines if case_sensitive was turned on.
-     * Let's just check if the file exists.
-     **/
+    // For now the settings file only determines if case_sensitive was turned on.
     settings_file = get_settings_path();
-    if (std::ifstream(settings_file)) {
-        case_sensitive = false;
+    if (std::ifstream settings{ settings_file }) {
+        std::string sensitivity;
+        settings >> sensitivity;
+        case_sensitive = sensitivity == "case_sensitive";
     }
 
     create_pid_file_or_kill_pid("nwgdmenu");
@@ -189,7 +189,7 @@ int main(int argc, char *argv[]) {
         sock.run("for_window [title=\"~nwgdmenu*\"] border none"sv);
     }
 
-    Gtk::Main kit(argc, argv);
+    auto app = Gtk::Application::create();
 
     auto provider = Gtk::CssProvider::create();
     auto display = Gdk::Display::get_default();
@@ -213,7 +213,7 @@ int main(int argc, char *argv[]) {
     // For openbox and similar we'll need the window x, y coordinates
     window.show();
 
-    DMenu menu;
+    DMenu menu{window};
     Anchor anchor(&menu);
     window.anchor = &anchor;
 
@@ -263,15 +263,7 @@ int main(int argc, char *argv[]) {
         //~ window.hide();
     }
 
-    if (show_searchbox) {
-        auto search_item = new Gtk::MenuItem();
-        search_item -> add(menu.searchbox);
-        search_item -> set_name("search_item");
-        search_item -> set_sensitive(false);
-        menu.append(*search_item);
-    }
-
-    menu.signal_deactivate().connect(sigc::ptr_fun(Gtk::Main::quit));
+    menu.signal_deactivate().connect(sigc::mem_fun(window, &MainWindow::close));
 
     int cnt = 0;
     for (auto& command : all_commands) {
@@ -319,7 +311,5 @@ int main(int argc, char *argv[]) {
 
     menu.show_all();
 
-    Gtk::Main::run(window);
-
-    return 0;
+    return app->run(window);
 }
