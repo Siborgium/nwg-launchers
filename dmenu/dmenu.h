@@ -45,11 +45,19 @@ class DMenu : public Gtk::Menu {
         DMenu(Gtk::Window&);
         ~DMenu();
         void emplace_back(const Glib::ustring&);
+        void show_all() {
+            Gtk::Menu::show_all();
+            // required to have first item selected on launch
+            fix_selection();
+        }
         
     private:
         Gtk::SearchEntry searchbox;
-        Gtk::Window&   main;
-        Gtk::MenuItem* first_item = nullptr;
+        // parent window
+        Gtk::Window&     main;
+        // the first item in list
+        Gtk::MenuItem*   first_item = nullptr;
+        // whether case sensitivity was changed during run
         bool case_sensitivity_changed = false;
         
         bool on_key_press_event(GdkEventKey* event) override;
@@ -61,11 +69,11 @@ class DMenu : public Gtk::Menu {
 
 class Anchor : public Gtk::Button {
     public:
-        Anchor(DMenu *);
-
+        Anchor(DMenu&);
     private:
         bool on_focus_in_event(GdkEventFocus* focus_event) override;
-        DMenu *menu;
+        Gdk::Gravity gravity_widget, gravity_menu;
+        DMenu& menu;
 };
 
 class MainWindow : public CommonWindow {

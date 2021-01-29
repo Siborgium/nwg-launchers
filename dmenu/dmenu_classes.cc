@@ -16,32 +16,23 @@
 
 #include "dmenu.h"
 
-Anchor::Anchor(DMenu *menu) : menu{menu} {}
+Anchor::Anchor(DMenu& menu):
+    gravity_widget{Gdk::GRAVITY_CENTER}, gravity_menu{Gdk::GRAVITY_CENTER}, menu{menu}
+{
+    constexpr std::array gravity { Gdk::GRAVITY_SOUTH, Gdk::GRAVITY_NORTH };
+    auto is_sway_like = wm == "sway" || wm == "i3";
+    if (v_align == "t") {
+        gravity_widget = gravity[is_sway_like];
+        gravity_menu   = gravity[is_sway_like];
+    } else if (v_align == "b") {
+        gravity_widget = gravity[!is_sway_like];
+        gravity_menu   = gravity[!is_sway_like];
+    }
+}
 
 bool Anchor::on_focus_in_event(GdkEventFocus* focus_event) {
     (void) focus_event; // suppress warning
-
-    Gdk::Gravity gravity_widget {Gdk::GRAVITY_CENTER};
-    Gdk::Gravity gravity_menu {Gdk::GRAVITY_CENTER};
-    if (wm == "sway" || wm == "i3") {
-        if (v_align == "t") {
-            gravity_widget = Gdk::GRAVITY_NORTH;
-            gravity_menu = Gdk::GRAVITY_NORTH;
-        } else if (v_align == "b") {
-            gravity_widget = Gdk::GRAVITY_SOUTH;
-            gravity_menu = Gdk::GRAVITY_SOUTH;
-        }
-    } else {
-        if (v_align == "t") {
-            gravity_widget = Gdk::GRAVITY_SOUTH;
-            gravity_menu = Gdk::GRAVITY_SOUTH;
-        } else if (v_align == "b") {
-            gravity_widget = Gdk::GRAVITY_NORTH;
-            gravity_menu = Gdk::GRAVITY_NORTH;
-        }
-    }
-    menu->popup_at_widget(this, gravity_widget, gravity_menu, nullptr);
-
+    menu.popup_at_widget(this, gravity_widget, gravity_menu, nullptr);
     return true;
 }
 
@@ -67,13 +58,13 @@ DMenu::DMenu(Gtk::Window& main): main{main} {
     searchbox.set_name("searchbox");
     searchbox.signal_search_changed()
         .connect(sigc::mem_fun(*this, &DMenu::filter_view));
+    // TODO: make searchbox return selection to items on focus_in event
     if (show_searchbox) {
         auto search_item = Gtk::manage(new Gtk::MenuItem{ searchbox });
         search_item->set_name("search_item");
         append(*search_item);
     }
     build_commands_list(*this, all_commands, rows);
-    fix_selection();
 }
 
 DMenu::~DMenu() {
@@ -130,6 +121,12 @@ bool DMenu::on_key_press_event(GdkEventKey* key_event) {
                 // seem to work fine as is
                 break;
             case GDK_KEY_Return:
+                if (auto active = dynamic_cast<Gtk::MenuItem*>(get_selected_item())) {
+                    if (active == dynamic_cast<Gtk::MenuItem*>(searchbox.get_parent())) {
+                        // searchbox is active, move selection to the first item in list
+                        fix_selection();
+                    }
+                }
                 break;
             default:
                 searchbox.grab_focus();

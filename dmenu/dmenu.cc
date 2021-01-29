@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
     window.show();
 
     DMenu menu{window};
-    Anchor anchor(&menu);
+    Anchor anchor{menu};
     window.anchor = &anchor;
 
     window.signal_button_press_event().connect(sigc::ptr_fun(&on_window_clicked));
